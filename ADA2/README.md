@@ -1,1 +1,2 @@
+# ADA 2
 Para el archivo llamado Ada2, lo estuve provando y realmente es buen codigo a mi perspectiva, dado que aunque son pocos datos que nos esta dando mienytras mas datos va almacenando, mas comienza a dar tirones y problemas el equipo, realemnete me gusto programar y darle ordenes a Chat Gpt para que me apoyara con este codigo
