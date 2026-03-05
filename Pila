@@ -1,0 +1,461 @@
+import tkinter as tk
+from tkinter import messagebox
+import time
+
+# ──────────────────────────────────────────────
+#  CLASE PILA (estructura de datos LIFO)
+# ──────────────────────────────────────────────
+class Pila:
+    def __init__(self, capacidad=6):
+        self.capacidad = capacidad
+        self._datos = []
+
+    def push(self, valor):
+        if self.esta_llena():
+            raise Exception("La pila está LLENA (Stack Overflow)")
+        self._datos.append(valor)
+
+    def pop(self):
+        if self.esta_vacia():
+            raise Exception("La pila está VACÍA (Stack Underflow)")
+        return self._datos.pop()
+
+    def peek(self):
+        if self.esta_vacia():
+            raise Exception("La pila está VACÍA")
+        return self._datos[-1]
+
+    def esta_vacia(self):
+        return len(self._datos) == 0
+
+    def esta_llena(self):
+        return len(self._datos) >= self.capacidad
+
+    def size(self):
+        return len(self._datos)
+
+    def obtener_elementos(self):
+        return list(self._datos)
+
+
+# ──────────────────────────────────────────────
+#  PALETA DE COLORES
+# ──────────────────────────────────────────────
+COLORES_BLOQUES = [
+    "#FF6B6B", "#FF9F43", "#FFEAA7",
+    "#55EFC4", "#74B9FF", "#A29BFE",
+]
+BG_DARK      = "#0f0c29"
+BG_PANEL     = "#1a1740"
+BG_SLOT      = "#1e1b3a"
+COLOR_BORDE  = "#6c5ce7"
+COLOR_TEXTO  = "#ffffff"
+COLOR_DIM    = "#636e72"
+COLOR_EXITO  = "#00b894"
+COLOR_ERROR  = "#d63031"
+COLOR_INFO   = "#74b9ff"
+COLOR_WARN   = "#fdcb6e"
+COLOR_TOP    = "#ffffff"
+
+
+# ──────────────────────────────────────────────
+#  APLICACIÓN TKINTER
+# ──────────────────────────────────────────────
+class AppPilaLIFO:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("🗂️  Pila LIFO — Estructuras Lineales")
+        self.root.configure(bg=BG_DARK)
+        self.root.resizable(False, False)
+
+        self.pila = Pila(capacidad=6)
+        self.historial = []
+        self._construir_ui()
+        self._actualizar_vista()
+
+    # ── Construcción de la interfaz ──────────────
+    def _construir_ui(self):
+        # ── Título ──────────────────────────────
+        titulo_frame = tk.Frame(self.root, bg=BG_DARK)
+        titulo_frame.pack(pady=(18, 4))
+
+        tk.Label(titulo_frame, text="ESTRUCTURAS LINEALES",
+                 font=("Courier", 9, "bold"), fg="#a29bfe", bg=BG_DARK,
+                 letter_spacing=4 if False else 0).pack()
+        tk.Label(titulo_frame, text="🗂️  PILA  —  LIFO",
+                 font=("Courier", 22, "bold"), fg=COLOR_TEXTO, bg=BG_DARK).pack()
+        tk.Label(titulo_frame, text="Last In  ·  First Out",
+                 font=("Courier", 10), fg=COLOR_DIM, bg=BG_DARK).pack()
+
+        # ── Cuerpo principal ────────────────────
+        cuerpo = tk.Frame(self.root, bg=BG_DARK)
+        cuerpo.pack(padx=20, pady=10)
+
+        self._panel_controles(cuerpo)   # izquierda
+        self._panel_pila(cuerpo)        # centro
+        self._panel_info(cuerpo)        # derecha
+
+        # ── Mensaje de estado ───────────────────
+        self.lbl_mensaje = tk.Label(
+            self.root, text="", font=("Courier", 11, "bold"),
+            fg=COLOR_TEXTO, bg=BG_DARK, pady=6)
+        self.lbl_mensaje.pack()
+
+        # ── Leyenda ─────────────────────────────
+        leyenda = (
+            "PUSH: agrega al tope  |  POP: elimina del tope  |  "
+            "PEEK: consulta sin eliminar"
+        )
+        tk.Label(self.root, text=leyenda, font=("Courier", 8),
+                 fg=COLOR_DIM, bg=BG_DARK, pady=6).pack()
+
+    # ── Panel izquierdo: controles ───────────────
+    def _panel_controles(self, padre):
+        frame = tk.Frame(padre, bg=BG_PANEL, bd=0,
+                         highlightbackground=COLOR_BORDE,
+                         highlightthickness=1)
+        frame.grid(row=0, column=0, padx=10, pady=4, sticky="n")
+
+        tk.Label(frame, text="OPERACIONES", font=("Courier", 9, "bold"),
+                 fg="#a29bfe", bg=BG_PANEL, pady=6).pack()
+
+        # Input
+        self.entrada = tk.Entry(
+            frame, font=("Courier", 13, "bold"),
+            bg="#2d3436", fg=COLOR_TEXTO, insertbackground=COLOR_TEXTO,
+            bd=0, highlightbackground=COLOR_BORDE, highlightthickness=2,
+            width=14, justify="center")
+        self.entrada.pack(padx=14, pady=(0, 10))
+        self.entrada.bind("<Return>", lambda e: self._accion_push())
+        tk.Label(frame, text="← escribe un valor, Enter = PUSH",
+                 font=("Courier", 7), fg=COLOR_DIM, bg=BG_PANEL).pack()
+
+        separador = tk.Frame(frame, bg=COLOR_BORDE, height=1)
+        separador.pack(fill="x", padx=14, pady=8)
+
+        botones = [
+            ("⬆  PUSH  (Apilar)",    "#6c5ce7", self._accion_push),
+            ("⬇  POP   (Desapilar)", "#d63031", self._accion_pop),
+            ("👁  PEEK  (Ver tope)",  "#0984e3", self._accion_peek),
+            ("🧹  VACIAR pila",       "#636e72", self._accion_vaciar),
+        ]
+        for txt, color, cmd in botones:
+            btn = tk.Button(
+                frame, text=txt,
+                font=("Courier", 11, "bold"),
+                bg=BG_PANEL, fg=color,
+                activebackground=color, activeforeground=COLOR_TEXTO,
+                bd=0, highlightbackground=color, highlightthickness=2,
+                width=22, pady=7, cursor="hand2",
+                command=cmd)
+            btn.pack(padx=14, pady=4)
+
+        # Historial
+        sep2 = tk.Frame(frame, bg=COLOR_BORDE, height=1)
+        sep2.pack(fill="x", padx=14, pady=8)
+        tk.Label(frame, text="HISTORIAL", font=("Courier", 9, "bold"),
+                 fg="#a29bfe", bg=BG_PANEL).pack()
+        self.historial_frame = tk.Frame(frame, bg=BG_PANEL)
+        self.historial_frame.pack(padx=14, pady=(4, 12))
+        self.historial_labels = []
+        for _ in range(6):
+            lbl = tk.Label(self.historial_frame, text="",
+                           font=("Courier", 9), fg=COLOR_DIM,
+                           bg=BG_PANEL, anchor="w", width=22)
+            lbl.pack(anchor="w")
+            self.historial_labels.append(lbl)
+
+    # ── Panel central: visualización gráfica ─────
+    def _panel_pila(self, padre):
+        frame = tk.Frame(padre, bg=BG_DARK)
+        frame.grid(row=0, column=1, padx=10, pady=4, sticky="n")
+
+        tk.Label(frame, text="VISUALIZACIÓN", font=("Courier", 9, "bold"),
+                 fg="#a29bfe", bg=BG_DARK).pack(pady=(0, 4))
+        tk.Label(frame, text="⬆ POP     PUSH ⬇",
+                 font=("Courier", 9), fg="#a29bfe", bg=BG_DARK).pack()
+
+        self.canvas = tk.Canvas(
+            frame, width=200, height=380,
+            bg=BG_DARK, bd=0, highlightthickness=0)
+        self.canvas.pack()
+
+        # Base
+        tk.Frame(frame, bg=COLOR_BORDE, height=6, width=200).pack()
+        tk.Label(frame, text="▔▔▔  BASE  ▔▔▔",
+                 font=("Courier", 8, "bold"), fg=COLOR_BORDE, bg=BG_DARK).pack()
+
+        # Indicador isEmpty / isFull / size
+        self.lbl_estado_lifo = tk.Label(
+            frame, text="", font=("Courier", 10, "bold"),
+            fg=COLOR_DIM, bg=BG_DARK, pady=6)
+        self.lbl_estado_lifo.pack()
+
+    # ── Panel derecho: información de estado ─────
+    def _panel_info(self, padre):
+        frame = tk.Frame(padre, bg=BG_PANEL, bd=0,
+                         highlightbackground=COLOR_BORDE,
+                         highlightthickness=1)
+        frame.grid(row=0, column=2, padx=10, pady=4, sticky="n")
+
+        tk.Label(frame, text="ESTADO DE LA PILA",
+                 font=("Courier", 9, "bold"),
+                 fg="#a29bfe", bg=BG_PANEL, pady=8).pack()
+
+        # Estado principal
+        self.lbl_estado_emoji = tk.Label(
+            frame, text="📭", font=("Arial", 26),
+            bg=BG_PANEL)
+        self.lbl_estado_emoji.pack()
+
+        self.lbl_estado_texto = tk.Label(
+            frame, text="VACÍA",
+            font=("Courier", 16, "bold"),
+            fg=COLOR_DIM, bg=BG_PANEL)
+        self.lbl_estado_texto.pack(pady=(0, 10))
+
+        sep = tk.Frame(frame, bg=COLOR_BORDE, height=1, width=160)
+        sep.pack(pady=6)
+
+        # Métricas
+        metricas = tk.Frame(frame, bg=BG_PANEL)
+        metricas.pack(pady=4, padx=20)
+
+        def metrica(parent, etiqueta, var_nombre, color):
+            f = tk.Frame(parent, bg=BG_PANEL)
+            f.pack(fill="x", pady=3)
+            tk.Label(f, text=etiqueta, font=("Courier", 9),
+                     fg=COLOR_DIM, bg=BG_PANEL, width=16, anchor="w").pack(side="left")
+            lbl = tk.Label(f, text="0", font=("Courier", 13, "bold"),
+                           fg=color, bg=BG_PANEL, width=4, anchor="e")
+            lbl.pack(side="right")
+            setattr(self, var_nombre, lbl)
+
+        metrica(metricas, "Elementos:",   "lbl_size",     COLOR_INFO)
+        metrica(metricas, "Capacidad:",   "lbl_cap",      "#fd79a8")
+        metrica(metricas, "Libres:",      "lbl_libres",   COLOR_WARN)
+        metrica(metricas, "está Vacía:",  "lbl_vacia",    COLOR_EXITO)
+        metrica(metricas, "está Llena:",  "lbl_llena",    COLOR_ERROR)
+
+        sep2 = tk.Frame(frame, bg=COLOR_BORDE, height=1, width=160)
+        sep2.pack(pady=8)
+
+        # Barra de ocupación
+        tk.Label(frame, text="OCUPACIÓN",
+                 font=("Courier", 8, "bold"), fg="#a29bfe", bg=BG_PANEL).pack()
+        barra_bg = tk.Frame(frame, bg="#2d3436", width=160, height=16)
+        barra_bg.pack(padx=20, pady=(4, 2))
+        barra_bg.pack_propagate(False)
+        self.barra_fill = tk.Frame(barra_bg, bg=COLOR_BORDE, width=0, height=16)
+        self.barra_fill.pack(side="left")
+
+        self.lbl_ocupacion = tk.Label(
+            frame, text="0 / 6 slots",
+            font=("Courier", 8), fg=COLOR_DIM, bg=BG_PANEL)
+        self.lbl_ocupacion.pack(pady=(0, 12))
+
+        # TOP actual
+        sep3 = tk.Frame(frame, bg=COLOR_BORDE, height=1, width=160)
+        sep3.pack(pady=4)
+        tk.Label(frame, text="TOP (tope actual):",
+                 font=("Courier", 9), fg=COLOR_DIM, bg=BG_PANEL).pack()
+        self.lbl_top = tk.Label(
+            frame, text="—",
+            font=("Courier", 18, "bold"),
+            fg=COLOR_TOP, bg=BG_PANEL, pady=8)
+        self.lbl_top.pack()
+
+    # ── Dibuja la pila en el canvas ──────────────
+    def _dibujar_pila(self):
+        c = self.canvas
+        c.delete("all")
+
+        CAP   = self.pila.capacidad
+        datos = self.pila.obtener_elementos()
+        W, H  = 200, 380
+        SLOT_H = H // CAP
+        PAD_X = 14
+
+        for i in range(CAP):
+            y1 = H - (i + 1) * SLOT_H + 2
+            y2 = H - i * SLOT_H - 2
+
+            # Fondo slot vacío
+            c.create_rectangle(PAD_X, y1, W - PAD_X, y2,
+                                outline="#2d3436", fill=BG_SLOT,
+                                dash=(4, 4))
+            c.create_text(W // 2, (y1 + y2) // 2,
+                          text=f"[ {i} ]",
+                          font=("Courier", 8), fill="#2d3436")
+
+            if i < len(datos):
+                color = COLORES_BLOQUES[i % len(COLORES_BLOQUES)]
+                es_top = (i == len(datos) - 1)
+
+                # Bloque del elemento
+                borde = COLOR_TOP if es_top else color
+                grosor = 3 if es_top else 1
+                c.create_rectangle(PAD_X + 2, y1 + 2, W - PAD_X - 2, y2 - 2,
+                                   fill=color, outline=borde, width=grosor)
+
+                # Brillo superior
+                c.create_rectangle(PAD_X + 2, y1 + 2, W - PAD_X - 2, y1 + 8,
+                                   fill="#ffffff33", outline="")
+
+                # Valor
+                c.create_text(W // 2 - 16, (y1 + y2) // 2,
+                               text=str(datos[i]),
+                               font=("Courier", 13, "bold"),
+                               fill="#ffffff")
+
+                # Etiqueta índice
+                c.create_text(W - PAD_X - 16, (y1 + y2) // 2,
+                               text=f"[{i}]",
+                               font=("Courier", 8),
+                               fill="rgba(255,255,255,0.4)" if False else "#ffffff88")
+
+                # Etiqueta TOP
+                if es_top:
+                    c.create_rectangle(PAD_X + 4, y1 + 4, PAD_X + 44, y1 + 16,
+                                       fill="#000000aa", outline="")
+                    c.create_text(PAD_X + 24, y1 + 10,
+                                  text="◄ TOP",
+                                  font=("Courier", 7, "bold"),
+                                  fill=COLOR_TOP)
+
+        # Flecha de dirección LIFO
+        c.create_line(W - 10, 10, W - 10, 30, fill="#a29bfe", width=2, arrow="first")
+        c.create_line(W - 10, 40, W - 10, 60, fill="#6c5ce7", width=2, arrow="last")
+
+    # ── Actualiza todos los widgets ──────────────
+    def _actualizar_vista(self):
+        p = self.pila
+        vacia  = p.esta_vacia()
+        llena  = p.esta_llena()
+        size   = p.size()
+        cap    = p.capacidad
+
+        # Dibujar pila
+        self._dibujar_pila()
+
+        # Estado principal
+        if vacia:
+            emoji, texto, color = "📭", "VACÍA",   COLOR_DIM
+        elif llena:
+            emoji, texto, color = "🔴", "LLENA",   COLOR_ERROR
+        else:
+            emoji, texto, color = "🟢", "CON DATOS", COLOR_EXITO
+
+        self.lbl_estado_emoji.config(text=emoji)
+        self.lbl_estado_texto.config(text=texto, fg=color)
+
+        # Métricas
+        self.lbl_size.config(text=str(size))
+        self.lbl_cap.config(text=str(cap))
+        self.lbl_libres.config(text=str(cap - size))
+        self.lbl_vacia.config(text="True" if vacia else "False",
+                               fg=COLOR_EXITO if vacia else COLOR_DIM)
+        self.lbl_llena.config(text="True" if llena else "False",
+                               fg=COLOR_ERROR if llena else COLOR_DIM)
+
+        # Barra
+        ancho_total = 160
+        ancho_fill  = int((size / cap) * ancho_total)
+        fill_color  = COLOR_ERROR if llena else COLOR_BORDE
+        self.barra_fill.config(width=ancho_fill, bg=fill_color)
+        self.lbl_ocupacion.config(text=f"{size} / {cap} slots")
+
+        # TOP
+        try:
+            self.lbl_top.config(text=str(p.peek()), fg=COLORES_BLOQUES[(size - 1) % 6])
+        except:
+            self.lbl_top.config(text="—", fg=COLOR_DIM)
+
+        # isEmpty / isFull
+        if vacia:
+            estado_lifo = "isEmpty() → True"
+            color_lifo  = COLOR_DIM
+        elif llena:
+            estado_lifo = "isFull() → True"
+            color_lifo  = COLOR_ERROR
+        else:
+            estado_lifo = f"size() → {size}"
+            color_lifo  = COLOR_EXITO
+        self.lbl_estado_lifo.config(text=estado_lifo, fg=color_lifo)
+
+        # Historial
+        for i, lbl in enumerate(self.historial_labels):
+            if i < len(self.historial):
+                lbl.config(text=self.historial[i],
+                            fg="#a29bfe" if i == 0 else COLOR_DIM)
+            else:
+                lbl.config(text="")
+
+    # ── Muestra mensaje temporal ─────────────────
+    def _mostrar_mensaje(self, texto, tipo="info"):
+        colores = {
+            "exito":  COLOR_EXITO,
+            "error":  COLOR_ERROR,
+            "warn":   COLOR_WARN,
+            "info":   COLOR_INFO,
+        }
+        color = colores.get(tipo, COLOR_INFO)
+        self.lbl_mensaje.config(text=texto, fg=color)
+        self.root.after(3000, lambda: self.lbl_mensaje.config(text=""))
+
+    def _agregar_historial(self, texto):
+        self.historial.insert(0, texto)
+        self.historial = self.historial[:6]
+
+    # ── Acciones ─────────────────────────────────
+    def _accion_push(self):
+        valor = self.entrada.get().strip()
+        if not valor:
+            self._mostrar_mensaje("⚠  Ingresa un valor para apilar.", "warn")
+            return
+        try:
+            self.pila.push(valor)
+            self._agregar_historial(f'PUSH "{valor}"')
+            self.entrada.delete(0, tk.END)
+            self._mostrar_mensaje(f'✅  PUSH: "{valor}" apilado al tope.', "exito")
+        except Exception as e:
+            self._mostrar_mensaje(f"🚫  {e}", "error")
+        finally:
+            self._actualizar_vista()
+
+    def _accion_pop(self):
+        try:
+            valor = self.pila.pop()
+            self._agregar_historial(f'POP  "{valor}"')
+            self._mostrar_mensaje(f'🗑   POP: "{valor}" desapilado.', "info")
+        except Exception as e:
+            self._mostrar_mensaje(f"🚫  {e}", "error")
+        finally:
+            self._actualizar_vista()
+
+    def _accion_peek(self):
+        try:
+            valor = self.pila.peek()
+            self._mostrar_mensaje(f'👁   PEEK: el tope es "{valor}".', "exito")
+        except Exception as e:
+            self._mostrar_mensaje(f"🚫  {e}", "error")
+
+    def _accion_vaciar(self):
+        if self.pila.esta_vacia():
+            self._mostrar_mensaje("ℹ️   La pila ya está vacía.", "warn")
+            return
+        # Pop uno a uno (correcto en LIFO)
+        while not self.pila.esta_vacia():
+            self.pila.pop()
+        self._agregar_historial("CLEAR pila")
+        self._mostrar_mensaje("🧹  Pila vaciada completamente.", "info")
+        self._actualizar_vista()
+
+
+# ──────────────────────────────────────────────
+#  MAIN
+# ──────────────────────────────────────────────
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AppPilaLIFO(root)
+    root.mainloop()
