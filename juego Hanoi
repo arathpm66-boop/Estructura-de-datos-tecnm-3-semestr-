@@ -1,0 +1,317 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+import time
+import threading
+
+# ─── Colores y estilo ───────────────────────────────────────────
+BG        = "#0d0d1a"
+PANEL_BG  = "#12122b"
+ACCENT    = "#7c3aed"
+ACCENT2   = "#06b6d4"
+TEXT      = "#e2e8f0"
+SUBTEXT   = "#94a3b8"
+BASE_CLR  = "#1e1e3f"
+PEG_CLR   = "#334155"
+
+DISK_COLORS = [
+    "#f43f5e","#fb923c","#facc15","#4ade80",
+    "#22d3ee","#818cf8","#e879f9","#f472b6",
+    "#34d399","#60a5fa"
+]
+
+CANVAS_W  = 900
+CANVAS_H  = 420
+ANIM_DELAY = 0.35   # segundos entre movimientos
+
+
+class HanoiApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Torres de Hanói")
+        self.root.configure(bg=BG)
+        self.root.resizable(False, False)
+
+        # Estado
+        self.n_disks   = tk.IntVar(value=4)
+        self.speed_var = tk.DoubleVar(value=0.35)
+        self.moves     = []
+        self.pegs      = [[], [], []]
+        self.move_count = 0
+        self.running   = False
+        self.paused    = False
+        self.pause_event = threading.Event()
+        self.pause_event.set()
+
+        self._build_ui()
+
+    # ─── Interfaz ───────────────────────────────────────────────
+    def _build_ui(self):
+        # Título
+        hdr = tk.Frame(self.root, bg=BG)
+        hdr.pack(fill="x", padx=30, pady=(22, 0))
+        tk.Label(hdr, text="TORRES DE HANÓI", font=("Courier New", 22, "bold"),
+                 fg=ACCENT2, bg=BG).pack(side="left")
+        self.time_lbl = tk.Label(hdr, text="⏱  --:--.--",
+                                 font=("Courier New", 13), fg=SUBTEXT, bg=BG)
+        self.time_lbl.pack(side="right", padx=8)
+
+        # Canvas
+        cf = tk.Frame(self.root, bg=PANEL_BG, bd=0)
+        cf.pack(padx=30, pady=12)
+        self.canvas = tk.Canvas(cf, width=CANVAS_W, height=CANVAS_H,
+                                bg=PANEL_BG, highlightthickness=0)
+        self.canvas.pack()
+
+        # Barra de estado
+        self.status_lbl = tk.Label(self.root,
+                                   text="Elige el número de discos y presiona ▶ Iniciar",
+                                   font=("Courier New", 11), fg=SUBTEXT, bg=BG)
+        self.status_lbl.pack(pady=(0, 8))
+
+        # Controles
+        ctrl = tk.Frame(self.root, bg=BG)
+        ctrl.pack(padx=30, pady=(0, 22))
+
+        # Número de discos
+        tk.Label(ctrl, text="Discos:", font=("Courier New", 11, "bold"),
+                 fg=TEXT, bg=BG).grid(row=0, column=0, padx=(0, 6))
+        spin = tk.Spinbox(ctrl, from_=1, to=10, textvariable=self.n_disks,
+                          width=4, font=("Courier New", 13, "bold"),
+                          bg=BASE_CLR, fg=ACCENT2, buttonbackground=PANEL_BG,
+                          relief="flat", justify="center",
+                          disabledbackground=BASE_CLR)
+        spin.grid(row=0, column=1, padx=(0, 18))
+
+        # Velocidad
+        tk.Label(ctrl, text="Velocidad:", font=("Courier New", 11, "bold"),
+                 fg=TEXT, bg=BG).grid(row=0, column=2, padx=(0, 6))
+        spd = tk.Scale(ctrl, from_=0.05, to=1.0, resolution=0.05,
+                       variable=self.speed_var, orient="horizontal",
+                       length=120, bg=BG, fg=TEXT, troughcolor=BASE_CLR,
+                       highlightthickness=0, bd=0, showvalue=False)
+        spd.grid(row=0, column=3, padx=(0, 18))
+        tk.Label(ctrl, text="← rápido · lento →",
+                 font=("Courier New", 9), fg=SUBTEXT, bg=BG).grid(row=0, column=4, padx=(0, 24))
+
+        # Botones
+        self.btn_start = self._btn(ctrl, "▶  Iniciar",  ACCENT,  self._start)
+        self.btn_start.grid(row=0, column=5, padx=4)
+        self.btn_pause = self._btn(ctrl, "⏸  Pausar",  ACCENT2, self._toggle_pause, state="disabled")
+        self.btn_pause.grid(row=0, column=6, padx=4)
+        self.btn_reset = self._btn(ctrl, "↺  Reiniciar","#475569", self._reset)
+        self.btn_reset.grid(row=0, column=7, padx=4)
+
+        # Contador de movimientos
+        self.moves_lbl = tk.Label(ctrl, text="Movimientos: 0",
+                                  font=("Courier New", 11), fg=ACCENT, bg=BG)
+        self.moves_lbl.grid(row=0, column=8, padx=(20, 0))
+
+        self._draw_initial()
+
+    def _btn(self, parent, text, color, cmd, state="normal"):
+        b = tk.Button(parent, text=text, command=cmd,
+                      font=("Courier New", 10, "bold"),
+                      bg=color, fg="white", activebackground=color,
+                      activeforeground="white", relief="flat",
+                      padx=14, pady=6, cursor="hand2", state=state,
+                      bd=0, highlightthickness=0)
+        return b
+
+    # ─── Dibujo ────────────────────────────────────────────────
+    def _peg_x(self, peg_idx):
+        return CANVAS_W // 4 * (peg_idx + 1)
+
+    def _draw_initial(self):
+        self.canvas.delete("all")
+        n = self.n_disks.get()
+        # Inicializar clavijas
+        self.pegs = [list(range(n, 0, -1)), [], []]
+        self._draw_scene()
+
+    def _draw_scene(self):
+        self.canvas.delete("all")
+        n_max = self.n_disks.get()
+        base_y = CANVAS_H - 40
+        peg_h  = CANVAS_H - 80
+        peg_w  = 8
+        max_disk_w = 180
+        min_disk_w = 36
+        disk_h = min(28, (peg_h - 10) // max(n_max, 1))
+
+        # Plataforma base
+        self.canvas.create_rectangle(
+            20, base_y + 10, CANVAS_W - 20, base_y + 22,
+            fill=PEG_CLR, outline="", width=0)
+
+        labels = ["A", "B", "C"]
+        for i in range(3):
+            px = self._peg_x(i)
+            # Poste
+            self.canvas.create_rectangle(
+                px - peg_w // 2, base_y - peg_h + 10,
+                px + peg_w // 2, base_y + 10,
+                fill=PEG_CLR, outline="", width=0)
+            # Etiqueta
+            self.canvas.create_text(px, base_y + 32, text=labels[i],
+                                    font=("Courier New", 14, "bold"),
+                                    fill=ACCENT2)
+            # Discos
+            for j, disk in enumerate(self.pegs[i]):
+                ratio = (disk - 1) / max(n_max - 1, 1)
+                dw = int(min_disk_w + ratio * (max_disk_w - min_disk_w))
+                dy = base_y - (j + 1) * disk_h + 2
+                color = DISK_COLORS[(disk - 1) % len(DISK_COLORS)]
+                r = disk_h // 2 - 1
+                x0, y0, x1, y1 = px - dw//2, dy, px + dw//2, dy + disk_h - 4
+                # Cuerpo del disco con bordes redondeados (approx)
+                self.canvas.create_rectangle(x0 + r, y0, x1 - r, y1,
+                                             fill=color, outline="", width=0)
+                self.canvas.create_rectangle(x0, y0 + r, x1, y1 - r,
+                                             fill=color, outline="", width=0)
+                self.canvas.create_oval(x0, y0, x0 + 2*r, y0 + 2*r,
+                                        fill=color, outline="")
+                self.canvas.create_oval(x1 - 2*r, y0, x1, y0 + 2*r,
+                                        fill=color, outline="")
+                self.canvas.create_oval(x0, y1 - 2*r, x0 + 2*r, y1,
+                                        fill=color, outline="")
+                self.canvas.create_oval(x1 - 2*r, y1 - 2*r, x1, y1,
+                                        fill=color, outline="")
+                # Número del disco
+                self.canvas.create_text(px, (dy + dy + disk_h - 4) // 2,
+                                        text=str(disk),
+                                        font=("Courier New", max(8, disk_h-12), "bold"),
+                                        fill="white")
+
+    # ─── Algoritmo ─────────────────────────────────────────────
+    def _hanoi_solve(self, n, src, dst, aux, moves_list):
+        if n == 0:
+            return
+        self._hanoi_solve(n - 1, src, aux, dst, moves_list)
+        moves_list.append((src, dst))
+        self._hanoi_solve(n - 1, aux, dst, src, moves_list)
+
+    # ─── Animación ─────────────────────────────────────────────
+    def _animate(self):
+        n = self.n_disks.get()
+        self.moves = []
+        self._hanoi_solve(n, 0, 2, 1, self.moves)
+        total = len(self.moves)
+
+        self.pegs = [list(range(n, 0, -1)), [], []]
+        self._draw_scene()
+
+        start_time = time.time()
+        self.move_count = 0
+
+        for idx, (src, dst) in enumerate(self.moves):
+            if not self.running:
+                break
+
+            # Esperar si está pausado
+            self.pause_event.wait()
+            if not self.running:
+                break
+
+            # Ejecutar movimiento
+            disk = self.pegs[src].pop()
+            self.pegs[dst].append(disk)
+            self.move_count += 1
+
+            elapsed = time.time() - start_time
+            mins = int(elapsed // 60)
+            secs = elapsed % 60
+            time_str = f"⏱  {mins:02d}:{secs:05.2f}"
+
+            pct = int((idx + 1) / total * 100)
+            labels = ["A", "B", "C"]
+            self.root.after(0, lambda m=self.move_count, t=time_str, p=pct,
+                                       s=src, d=dst, dk=disk:
+                            self._update_ui(m, t, p, s, d, dk))
+
+            delay = self.speed_var.get()
+            time.sleep(delay)
+
+        if self.running:
+            elapsed = time.time() - start_time
+            mins = int(elapsed // 60)
+            secs = elapsed % 60
+            final_time = f"{mins:02d}:{secs:05.2f}"
+            self.root.after(0, lambda t=final_time, m=self.move_count:
+                            self._finish(t, m))
+
+        self.running = False
+
+    def _update_ui(self, move_count, time_str, pct, src, dst, disk):
+        self._draw_scene()
+        self.moves_lbl.config(text=f"Movimientos: {move_count}")
+        self.time_lbl.config(text=time_str, fg=ACCENT2)
+        labels = ["A", "B", "C"]
+        self.status_lbl.config(
+            text=f"Disco {disk}: {labels[src]} → {labels[dst]}   ({pct}% completado)",
+            fg=DISK_COLORS[(disk - 1) % len(DISK_COLORS)])
+
+    def _finish(self, final_time, total_moves):
+        self.status_lbl.config(
+            text=f"✔ ¡Resuelto! {total_moves} movimientos en {final_time}",
+            fg="#4ade80")
+        self.time_lbl.config(text=f"⏱  {final_time}", fg="#4ade80")
+        self.btn_start.config(state="normal")
+        self.btn_pause.config(state="disabled")
+        self._draw_scene()
+        messagebox.showinfo("¡Completado!",
+                            f"Torres de Hanói resuelto\n\n"
+                            f"🔢 Discos:       {self.n_disks.get()}\n"
+                            f"🔄 Movimientos:  {total_moves}\n"
+                            f"⏱  Tiempo:       {final_time}\n\n"
+                            f"Mínimo teórico:  {2**self.n_disks.get()-1} movimientos")
+
+    # ─── Controles ─────────────────────────────────────────────
+    def _start(self):
+        if self.running:
+            return
+        self.running = True
+        self.paused  = False
+        self.pause_event.set()
+        self.move_count = 0
+        self.moves_lbl.config(text="Movimientos: 0")
+        self.time_lbl.config(text="⏱  00:00.00", fg=SUBTEXT)
+        self.status_lbl.config(text="Resolviendo…", fg=SUBTEXT)
+        self.btn_start.config(state="disabled")
+        self.btn_pause.config(state="normal", text="⏸  Pausar")
+        t = threading.Thread(target=self._animate, daemon=True)
+        t.start()
+
+    def _toggle_pause(self):
+        if not self.running:
+            return
+        if self.paused:
+            self.paused = False
+            self.pause_event.set()
+            self.btn_pause.config(text="⏸  Pausar")
+            self.status_lbl.config(text="Reanudando…", fg=SUBTEXT)
+        else:
+            self.paused = True
+            self.pause_event.clear()
+            self.btn_pause.config(text="▶  Reanudar")
+            self.status_lbl.config(text="⏸  Pausado", fg=ACCENT)
+
+    def _reset(self):
+        self.running = False
+        self.paused  = False
+        self.pause_event.set()
+        self.move_count = 0
+        self.moves_lbl.config(text="Movimientos: 0")
+        self.time_lbl.config(text="⏱  --:--.--", fg=SUBTEXT)
+        self.status_lbl.config(
+            text="Elige el número de discos y presiona ▶ Iniciar", fg=SUBTEXT)
+        self.btn_start.config(state="normal")
+        self.btn_pause.config(state="disabled", text="⏸  Pausar")
+        self._draw_initial()
+
+
+# ─── Main ────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.configure(bg=BG)
+    app = HanoiApp(root)
+    root.mainloop()
